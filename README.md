@@ -1,3 +1,8 @@
+![Python](https://img.shields.io/badge/python-3.12-blue.svg)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688.svg)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15+-336791.svg)
+![License](https://img.shields.io/badge/license-MIT-green.svg)
+
 # Git CMS Engine
 
 A lightweight, secure, and asynchronous Git-backed Headless CMS Engine built with FastAPI, SQLAlchemy, and PostgreSQL.
