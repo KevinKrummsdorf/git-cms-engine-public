@@ -28,6 +28,7 @@ from schemas.article import (
     SeriesNavigationResponse,
 )
 from services.parser import is_safe_path
+from services.processor import deduplicate_cite_keys, is_doi
 
 router = APIRouter(prefix="/api/v1/cms", tags=["articles"])
 
@@ -126,6 +127,9 @@ def get_article_by_route(
         related_sources = [r.strip() for r in related_sources.split(",") if r.strip()]
     elif not isinstance(related_sources, list):
         related_sources = []
+    related_sources = deduplicate_cite_keys(related_sources, log_warnings=False)
+
+    seen_cite_keys: set[str] = set()
 
     if related_sources:
         z_stmt = select(ZoteroSourceModel).where(ZoteroSourceModel.cite_key.in_(related_sources))
@@ -133,6 +137,9 @@ def get_article_by_route(
         z_sources_map = {z.cite_key: z for z in z_sources}
 
         for key in related_sources:
+            if not key or key.lower() in seen_cite_keys:
+                continue
+            seen_cite_keys.add(key.lower())
             if key in z_sources_map:
                 z_source = z_sources_map[key]
                 authors_list = [
@@ -155,6 +162,10 @@ def get_article_by_route(
     else:
         if article.sources:
             for article_source in article.sources:
+                cite_key = article_source.source_key
+                if not cite_key or is_doi(cite_key) or cite_key.lower() in seen_cite_keys:
+                    continue
+                seen_cite_keys.add(cite_key.lower())
                 if article_source.zotero_source:
                     z_source = article_source.zotero_source
                     authors_list = [

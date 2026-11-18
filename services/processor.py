@@ -43,6 +43,68 @@ def validate_frontmatter(meta: dict[str, Any], file_path: str) -> FrontmatterSch
         raise InvalidFrontmatterError(f"Invalid frontmatter in '{file_path}': {details}") from exc
 
 
+DOI_PATTERN = re.compile(
+    r"^(?:(?:https?://(?:dx\.)?doi\.org/)|(?:doi:\s*))?10\.\d{4,9}/\S+$",
+    re.IGNORECASE,
+)
+
+
+def is_doi(key: str) -> bool:
+    """True, wenn der String eine DOI ist (10.xxxx/..., ggf. mit doi:- oder doi.org-Praefix)."""
+    if not key:
+        return False
+    cleaned = str(key).strip()
+    return cleaned.startswith("10.") or bool(DOI_PATTERN.match(cleaned))
+
+
+def deduplicate_cite_keys(
+    raw_sources: list | str | None,
+    file_path: str = "",
+    warnings: list[str] | None = None,
+    log_warnings: bool = True,
+) -> list[str]:
+    """Order-preserving, case-insensitive dedup of cite_keys; DOIs are skipped."""
+    if not raw_sources:
+        return []
+    if isinstance(raw_sources, str):
+        raw_sources = [raw_sources]
+
+    unique_keys: list[str] = []
+    seen_lower: set[str] = set()
+    loc = f" in {file_path}" if file_path else ""
+
+    for item in raw_sources:
+        if not item:
+            continue
+        clean_key = str(item).strip()
+        if not clean_key:
+            continue
+
+        # 1. DOIs komplett ueberspringen
+        if is_doi(clean_key):
+            msg = f"[PROCESSOR INFO] DOI '{clean_key}' übersprungen{loc}"
+            if log_warnings:
+                print(msg, flush=True)
+            if warnings is not None:
+                warnings.append(msg)
+            continue
+
+        # 2. Case-insensitive Duplikat-Pruefung
+        key_lower = clean_key.lower()
+        if key_lower in seen_lower:
+            msg = f"[PROCESSOR INFO] Doppelter cite_key '{clean_key}' ignoriert{loc}"
+            if log_warnings:
+                print(msg, flush=True)
+            if warnings is not None:
+                warnings.append(msg)
+            continue
+
+        seen_lower.add(key_lower)
+        unique_keys.append(clean_key)
+
+    return unique_keys
+
+
 def sync_resources_directory(raw_data_path: Path, processed_data_path: Path) -> None:
     """Kopiert statische Ressourcen ausschließlich aus raw_data/resources nach processed_data/resources."""
     src_dir = raw_data_path / "resources"
@@ -357,7 +419,7 @@ def upsert_single_article(
     return existing_article
 
 
-def rebuild_all_relations_and_sources(db: Session) -> None:
+def rebuild_all_relations_and_sources(db: Session, warnings: list[str] | None = None) -> None:
     link_pattern = re.compile(r"\[(?P<title>[^\]]*)\]\((?P<target>[^)\s]+\.md(?:#[^)\s]*)?)\)")
     external_scheme_pattern = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.\-]*:")
 
@@ -482,6 +544,9 @@ def rebuild_all_relations_and_sources(db: Session) -> None:
         if isinstance(rel_str, str):
             rel_sources = [s.strip() for s in rel_str.split(",") if s.strip()]
             raw_source_keys.extend(rel_sources)
+        raw_source_keys = deduplicate_cite_keys(
+            raw_source_keys, file_path=art.file_path, warnings=warnings, log_warnings=True
+        )
 
         internal_links = []
         for match in link_pattern.finditer(content):
@@ -578,13 +643,15 @@ def rebuild_all_relations_and_sources(db: Session) -> None:
 
 
 def process_all_markdown_files(db: Session) -> dict[str, Any]:
-    stats = {
+    warnings: list[str] = []
+    stats: dict[str, Any] = {
         "total": 0,
         "created": 0,
         "updated": 0,
         "deleted": 0,
         "ignored": 0,
         "invalid": 0,
+        "warnings": warnings,
     }
 
     try:
@@ -755,7 +822,7 @@ def process_all_markdown_files(db: Session) -> dict[str, Any]:
             print(f"[PROCESSOR OK] Successfully compiled: {relative_file_path} -> Route: /{clean_route}")
 
         try:
-            rebuild_all_relations_and_sources(db)
+            rebuild_all_relations_and_sources(db, warnings=warnings)
         except Exception as e:
             print(f"[PROCESSOR ERROR] Failed to rebuild relations and sources: {e}")
 

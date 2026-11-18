@@ -37,7 +37,7 @@ class Settings(BaseSettings):
         description="If True, skips all Git network operations and reads directly from local path.",
     )
     cms_git_url: str = Field(
-        default="https://github.com/KevinKrummsdorf/my-docs",
+        default="https://github.com/your-username/your-docs-repo",
         description="Clone URL for the content repository (HTTPS or SSH).",
     )
     cms_git_pat: Optional[SecretStr] = Field(

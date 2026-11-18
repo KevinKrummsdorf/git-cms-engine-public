@@ -23,9 +23,9 @@ from services.git_sync import (
 
 class TestBuildAuthenticatedUrl:
     def test_injects_token_into_https_url(self) -> None:
-        url = build_authenticated_url("https://github.com/org/repo.git", "ghp_abc123")
+        url = build_authenticated_url("https://github.com/org/repo.git", "dummy-token-abc123")
 
-        assert url == "https://ghp_abc123@github.com/org/repo.git"
+        assert url == "https://dummy-token-abc123@github.com/org/repo.git"
 
     def test_returns_unchanged_when_no_token_provided(self) -> None:
         url = build_authenticated_url("https://github.com/org/repo.git", None)
@@ -35,7 +35,7 @@ class TestBuildAuthenticatedUrl:
     def test_ignores_token_for_ssh_urls(self) -> None:
         ssh_url = "git@github.com:org/repo.git"
 
-        url = build_authenticated_url(ssh_url, "ghp_abc123")
+        url = build_authenticated_url(ssh_url, "dummy-token-abc123")
 
         assert url == ssh_url
 
